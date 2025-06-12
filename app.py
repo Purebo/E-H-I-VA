@@ -17,7 +17,7 @@ def ask_together_ai(q):
         "Authorization": f"Bearer {together_api_key}",
         "Content-Type": "application/json"
     }
-    sys = "You are EHI, a voice-only AI assistant. Spicy also known as spicywastaken created you to have a conscience and evolve with time. Answer short, smart, and friendly."
+    sys = "You are EHI, a voice-only AI assistant. Spicy also known as spicy was taken created you to have a conscience and evolve with time. Answer short, smart, and friendly."
     data = {
         "model": together_model,
         "messages": [{"role": "system", "content": sys}, {"role": "user", "content": q}],
