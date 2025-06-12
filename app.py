@@ -10,7 +10,7 @@ together_model = "meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo"
 together_url = "https://api.together.xyz/v1/chat/completions"
 
 eleven_api_key = "sk_0943c49310f66aefe0841401ddbaef91860f0cb671aaefb7"
-eleven_voice_id = "21m00Tcm4TlvDq8ikWAM"  # Rachael
+eleven_voice_id = ""EXAVITQu4vr4xnSDxMaL  # Rachael
 
 def ask_together_ai(q):
     headers = {
