@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>EHI - Voice Assistant</title>
+  <style>
+    body {
+      background: #0e0e0e;
+      color: white;
+      font-family: 'Segoe UI', sans-serif;
+      text-align: center;
+      padding-top: 10%;
+    }
+    #response {
+      margin-top: 2rem;
+      font-size: 1.5rem;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #mic {
+      background: #444;
+      color: white;
+      border: none;
+      padding: 1.2rem;
+      border-radius: 50%;
+      font-size: 2rem;
+      cursor: pointer;
+      margin-top: 2rem;
+      box-shadow: 0 0 20px #0ff;
+    }
+    #mic:hover {
+      background: #0ff;
+      color: black;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎤 Talk to EHI</h1>
+  <p>Click the mic and speak. EHI will answer with voice.</p>
+  <button id="mic">🎙️</button>
+  <div id="response">EHI is ready...</div>
+
+  <script>
+    const mic = document.getElementById("mic");
+    const responseBox = document.getElementById("response");
+
+    const synth = window.speechSynthesis;
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    mic.onclick = () => {
+      responseBox.textContent = "Listening...";
+      recognition.start();
+    };
+
+    recognition.onresult = async (event) => {
+      const msg = event.results[0][0].transcript;
+      responseBox.textContent = `You: ${msg}`;
+      const res = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg })
+      });
+      const data = await res.json();
+      speak(data.response);
+      responseBox.textContent = `EHI: ${data.response}`;
+    };
+
+    recognition.onerror = () => {
+      responseBox.textContent = "Didn't catch that. Try again.";
+    };
+
+    function speak(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "en-US";
+      utterance.rate = 1.0;
+      synth.speak(utterance);
+    }
+  </script>
+</body>
+</html>
