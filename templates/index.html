@@ -45,25 +45,26 @@
     const mic = document.getElementById("mic");
     const responseBox = document.getElementById("response");
 
-    const synth = window.speechSynthesis;
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    const elevenLabsApiKey = "sk_0943c49310f66aefe0841401ddbaef91860f0cb671aaefb7";
+    const rachaelVoiceId = "21m00Tcm4TlvDq8ikWAM";
 
-    let voiceReady = false;
+    let recognition;
 
-    // 🚀 Activate voice after first user tap
-    window.addEventListener("click", () => {
-      if (!voiceReady) {
-        const dummy = new SpeechSynthesisUtterance("Voice is now activated.");
-        synth.speak(dummy);
-        voiceReady = true;
-      }
-    }, { once: true });
+    try {
+      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+    } catch (error) {
+      responseBox.textContent = "❌ Speech recognition not supported.";
+    }
 
     mic.onclick = () => {
-      responseBox.textContent = "Listening...";
+      if (!recognition) {
+        responseBox.textContent = "⚠️ Your browser does not support voice input.";
+        return;
+      }
+      responseBox.textContent = "🎧 Listening...";
       recognition.start();
     };
 
@@ -80,21 +81,41 @@
 
         const data = await res.json();
         responseBox.textContent = `EHI: ${data.response}`;
-        if (voiceReady) speak(data.response);
+        speakWithElevenLabs(data.response);
       } catch (err) {
-        responseBox.textContent = "Error getting response.";
+        responseBox.textContent = "⚠️ Error getting response from EHI.";
       }
     };
 
     recognition.onerror = () => {
-      responseBox.textContent = "Didn't catch that. Try again.";
+      responseBox.textContent = "❌ Didn't catch that. Try again.";
     };
 
-    function speak(text) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "en-US";
-      utterance.rate = 1.0;
-      synth.speak(utterance);
+    async function speakWithElevenLabs(text) {
+      try {
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${rachaelVoiceId}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "xi-api-key": elevenLabsApiKey
+          },
+          body: JSON.stringify({
+            text: text,
+            voice_settings: {
+              stability: 0.75,
+              similarity_boost: 0.75
+            }
+          })
+        });
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audio.play();
+      } catch (error) {
+        console.error("ElevenLabs error:", error);
+        responseBox.textContent = "❌ Voice failed to load.";
+      }
     }
   </script>
 </body>
