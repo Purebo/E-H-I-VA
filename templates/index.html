@@ -45,32 +45,31 @@
     const mic = document.getElementById("mic");
     const responseBox = document.getElementById("response");
 
-    const elevenLabsApiKey = "sk_0943c49310f66aefe0841401ddbaef91860f0cb671aaefb7";
-    const rachaelVoiceId = "21m00Tcm4TlvDq8ikWAM";
+    const synth = window.speechSynthesis;
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
 
-    let recognition;
+    let voiceReady = false;
 
-    try {
-      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      recognition.lang = "en-US";
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-    } catch (error) {
-      responseBox.textContent = "❌ Speech recognition not supported.";
-    }
+    // Activate audio on first user interaction
+    window.addEventListener("click", () => {
+      if (!voiceReady) {
+        const dummy = new SpeechSynthesisUtterance("Voice activated.");
+        synth.speak(dummy);
+        voiceReady = true;
+      }
+    }, { once: true });
 
     mic.onclick = () => {
-      if (!recognition) {
-        responseBox.textContent = "⚠️ Your browser does not support voice input.";
-        return;
-      }
-      responseBox.textContent = "🎧 Listening...";
+      responseBox.textContent = "🎙️ Listening...";
       recognition.start();
     };
 
     recognition.onresult = async (event) => {
       const msg = event.results[0][0].transcript;
-      responseBox.textContent = `You: ${msg}`;
+      responseBox.textContent = `🗣️ You: ${msg}`;
 
       try {
         const res = await fetch("/ask", {
@@ -80,10 +79,11 @@
         });
 
         const data = await res.json();
-        responseBox.textContent = `EHI: ${data.response}`;
-        speakWithElevenLabs(data.response);
+        responseBox.textContent = `🤖 EHI: ${data.response}`;
+        if (voiceReady) playVoice(data.response);
       } catch (err) {
-        responseBox.textContent = "⚠️ Error getting response from EHI.";
+        console.error("Fetch failed:", err);
+        responseBox.textContent = "❌ Error getting response.";
       }
     };
 
@@ -91,31 +91,39 @@
       responseBox.textContent = "❌ Didn't catch that. Try again.";
     };
 
-    async function speakWithElevenLabs(text) {
-      try {
-        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${rachaelVoiceId}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "xi-api-key": elevenLabsApiKey
-          },
-          body: JSON.stringify({
-            text: text,
-            voice_settings: {
-              stability: 0.75,
-              similarity_boost: 0.75
-            }
-          })
-        });
+    async function playVoice(text) {
+      const apiKey = "sk_0943c49310f66aefe0841401ddbaef91860f0cb671aaefb7";  // Keep this safe in prod!
+      const voiceId = "EXAVITQu4vr4xnSDxMaL"; // Bella
 
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-        audio.play();
-      } catch (error) {
-        console.error("ElevenLabs error:", error);
-        responseBox.textContent = "❌ Voice failed to load.";
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "xi-api-key": apiKey
+        },
+        body: JSON.stringify({
+          text: text,
+          model_id: "eleven_monolingual_v1",
+          voice_settings: { stability: 0.7, similarity_boost: 0.8 }
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("🔴 ElevenLabs error:", errText);
+        responseBox.textContent = "❌ Voice error: " + response.status;
+        return;
       }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audio.autoplay = true;
+      audio.onplay = () => console.log("🔊 EHI is speaking...");
+      audio.onerror = (e) => {
+        console.error("Audio playback failed:", e);
+        responseBox.textContent = "❌ Audio playback error.";
+      };
     }
   </script>
 </body>
