@@ -51,6 +51,17 @@
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
+    let voiceReady = false;
+
+    // 🚀 Activate voice after first user tap
+    window.addEventListener("click", () => {
+      if (!voiceReady) {
+        const dummy = new SpeechSynthesisUtterance("Voice is now activated.");
+        synth.speak(dummy);
+        voiceReady = true;
+      }
+    }, { once: true });
+
     mic.onclick = () => {
       responseBox.textContent = "Listening...";
       recognition.start();
@@ -59,14 +70,20 @@
     recognition.onresult = async (event) => {
       const msg = event.results[0][0].transcript;
       responseBox.textContent = `You: ${msg}`;
-      const res = await fetch("/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg })
-      });
-      const data = await res.json();
-      speak(data.response);
-      responseBox.textContent = `EHI: ${data.response}`;
+
+      try {
+        const res = await fetch("/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: msg })
+        });
+
+        const data = await res.json();
+        responseBox.textContent = `EHI: ${data.response}`;
+        if (voiceReady) speak(data.response);
+      } catch (err) {
+        responseBox.textContent = "Error getting response.";
+      }
     };
 
     recognition.onerror = () => {
