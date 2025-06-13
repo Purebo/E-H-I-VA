@@ -3,8 +3,8 @@ import datetime, requests, wikipedia
 
 app = Flask(__name__)
 
-together_api_key = "tgp_v1_Pctw4hBJp8GJ-O1iX_yeLiSMBZCkBkYckXaMiCJVYZs"
-together_model = "meta-llama/Llama-2-13b-chat-hf"
+together_api_key = "0ef4d730058fe8e719347bd6ea8dd4532b72bcf5bbe5f83709ba727059bf83e9"
+together_model = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
 together_url = "https://api.together.xyz/v1/chat/completions"
 
 def ask_together_ai(q):
