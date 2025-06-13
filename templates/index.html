@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EHI - Voice Assistant</title>
   <style>
     body {
@@ -10,28 +11,76 @@
       font-family: 'Segoe UI', sans-serif;
       text-align: center;
       padding-top: 10%;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 1rem;
+    }
+    p {
+      margin-bottom: 2rem;
+      opacity: 0.8;
     }
     #response {
       margin-top: 2rem;
-      font-size: 1.5rem;
+      font-size: 1.2rem;
       max-width: 600px;
       margin-left: auto;
       margin-right: auto;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     #mic {
       background: #444;
       color: white;
       border: none;
-      padding: 1.2rem;
+      padding: 1.5rem;
       border-radius: 50%;
       font-size: 2rem;
       cursor: pointer;
       margin-top: 2rem;
       box-shadow: 0 0 20px #0ff;
+      transition: all 0.3s ease;
+      width: 80px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     #mic:hover {
       background: #0ff;
       color: black;
+      transform: scale(1.1);
+    }
+    #mic:disabled {
+      background: #666;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .listening {
+      background: #ff4444 !important;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    .error {
+      color: #ff6b6b;
+    }
+    .success {
+      color: #51cf66;
+    }
+    #status {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      opacity: 0.7;
     }
   </style>
 </head>
@@ -39,46 +88,212 @@
   <h1>🎤 Talk to EHI</h1>
   <p>Click the mic and speak. EHI will answer with voice.</p>
   <button id="mic">🎙️</button>
+  <div id="status">Click the microphone to start</div>
   <div id="response">EHI is ready...</div>
-
+  
   <script>
     const mic = document.getElementById("mic");
     const responseBox = document.getElementById("response");
-
+    const statusBox = document.getElementById("status");
     const synth = window.speechSynthesis;
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    mic.onclick = () => {
-      responseBox.textContent = "Listening...";
-      recognition.start();
-    };
-
-    recognition.onresult = async (event) => {
-      const msg = event.results[0][0].transcript;
-      responseBox.textContent = `You: ${msg}`;
-      const res = await fetch("/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg })
-      });
-      const data = await res.json();
-      speak(data.response);
-      responseBox.textContent = `EHI: ${data.response}`;
-    };
-
-    recognition.onerror = () => {
-      responseBox.textContent = "Didn't catch that. Try again.";
-    };
-
-    function speak(text) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "en-US";
-      utterance.rate = 1.0;
-      synth.speak(utterance);
+    
+    let recognition = null;
+    let isListening = false;
+    
+    // Initialize speech recognition
+    function initSpeechRecognition() {
+      try {
+        if ('webkitSpeechRecognition' in window) {
+          recognition = new webkitSpeechRecognition();
+        } else if ('SpeechRecognition' in window) {
+          recognition = new SpeechRecognition();
+        } else {
+          throw new Error('Speech recognition not supported');
+        }
+        
+        recognition.lang = "en-US";
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        recognition.continuous = false;
+        
+        recognition.onstart = () => {
+          console.log('Speech recognition started');
+          isListening = true;
+          mic.classList.add('listening');
+          mic.disabled = true;
+          statusBox.textContent = "Listening... Speak now!";
+          responseBox.textContent = "🎧 Listening...";
+        };
+        
+        recognition.onresult = async (event) => {
+          console.log('Speech recognition result:', event);
+          const msg = event.results[0][0].transcript;
+          const confidence = event.results[0][0].confidence;
+          
+          console.log(`Recognized: "${msg}" (confidence: ${confidence})`);
+          
+          statusBox.textContent = `Heard: "${msg}"`;
+          responseBox.textContent = `You said: "${msg}"`;
+          
+          // Send to backend
+          try {
+            statusBox.textContent = "Processing your request...";
+            responseBox.textContent = "🤖 EHI is thinking...";
+            
+            const res = await fetch("/ask", {
+              method: "POST",
+              headers: { 
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+              },
+              body: JSON.stringify({ message: msg })
+            });
+            
+            if (!res.ok) {
+              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+            
+            const data = await res.json();
+            console.log('Backend response:', data);
+            
+            if (data.response) {
+              speak(data.response);
+              responseBox.textContent = `EHI: ${data.response}`;
+              statusBox.textContent = "Response received!";
+              statusBox.className = "success";
+            } else {
+              throw new Error('No response from EHI');
+            }
+            
+          } catch (error) {
+            console.error('Backend error:', error);
+            const errorMsg = `Sorry, I couldn't process that. Error: ${error.message}`;
+            responseBox.textContent = errorMsg;
+            statusBox.textContent = "Error occurred";
+            statusBox.className = "error";
+            speak("Sorry, I encountered an error. Please try again.");
+          }
+        };
+        
+        recognition.onerror = (event) => {
+          console.error('Speech recognition error:', event.error);
+          let errorMsg = "Speech recognition error: ";
+          
+          switch(event.error) {
+            case 'no-speech':
+              errorMsg += "No speech detected. Please try again.";
+              break;
+            case 'audio-capture':
+              errorMsg += "Microphone access denied or unavailable.";
+              break;
+            case 'not-allowed':
+              errorMsg += "Microphone permission denied.";
+              break;
+            case 'network':
+              errorMsg += "Network error occurred.";
+              break;
+            default:
+              errorMsg += event.error;
+          }
+          
+          responseBox.textContent = errorMsg;
+          statusBox.textContent = "Error occurred";
+          statusBox.className = "error";
+          resetMic();
+        };
+        
+        recognition.onend = () => {
+          console.log('Speech recognition ended');
+          resetMic();
+        };
+        
+        return true;
+      } catch (error) {
+        console.error('Speech recognition initialization failed:', error);
+        statusBox.textContent = "Speech recognition not supported in this browser";
+        statusBox.className = "error";
+        mic.disabled = true;
+        return false;
+      }
     }
+    
+    function resetMic() {
+      isListening = false;
+      mic.classList.remove('listening');
+      mic.disabled = false;
+      if (statusBox.className !== "error" && statusBox.className !== "success") {
+        statusBox.textContent = "Click the microphone to start";
+        statusBox.className = "";
+      }
+      // Clear status classes after 3 seconds
+      setTimeout(() => {
+        statusBox.className = "";
+        statusBox.textContent = "Click the microphone to start";
+      }, 3000);
+    }
+    
+    function speak(text) {
+      try {
+        // Cancel any ongoing speech
+        synth.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "en-US";
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        
+        utterance.onstart = () => {
+          console.log('Speech synthesis started');
+          statusBox.textContent = "EHI is speaking...";
+        };
+        
+        utterance.onend = () => {
+          console.log('Speech synthesis ended');
+          statusBox.textContent = "Ready for next question";
+        };
+        
+        utterance.onerror = (event) => {
+          console.error('Speech synthesis error:', event);
+          statusBox.textContent = "Speech synthesis error";
+          statusBox.className = "error";
+        };
+        
+        synth.speak(utterance);
+      } catch (error) {
+        console.error('Speech synthesis failed:', error);
+        statusBox.textContent = "Text-to-speech not available";
+        statusBox.className = "error";
+      }
+    }
+    
+    // Initialize everything when page loads
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('Page loaded, initializing...');
+      
+      if (initSpeechRecognition()) {
+        mic.onclick = () => {
+          if (!isListening && recognition) {
+            try {
+              console.log('Starting speech recognition...');
+              recognition.start();
+            } catch (error) {
+              console.error('Failed to start recognition:', error);
+              responseBox.textContent = "Failed to start speech recognition";
+              statusBox.textContent = "Error starting microphone";
+              statusBox.className = "error";
+            }
+          }
+        };
+      }
+    });
+    
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && isListening) {
+        recognition.stop();
+      }
+    });
   </script>
 </body>
 </html>
