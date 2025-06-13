@@ -17,9 +17,6 @@
       max-width: 600px;
       margin-left: auto;
       margin-right: auto;
-      padding: 1rem;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
     }
     #mic {
       background: #444;
@@ -31,25 +28,10 @@
       cursor: pointer;
       margin-top: 2rem;
       box-shadow: 0 0 20px #0ff;
-      transition: all 0.3s ease;
     }
     #mic:hover {
       background: #0ff;
       color: black;
-      transform: scale(1.1);
-    }
-    #mic:disabled {
-      background: #666;
-      cursor: not-allowed;
-      box-shadow: none;
-    }
-    .loading {
-      animation: pulse 1.5s infinite;
-    }
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.5; }
-      100% { opacity: 1; }
     }
   </style>
 </head>
@@ -58,198 +40,45 @@
   <p>Click the mic and speak. EHI will answer with voice.</p>
   <button id="mic">🎙️</button>
   <div id="response">EHI is ready...</div>
-  
+
   <script>
     const mic = document.getElementById("mic");
     const responseBox = document.getElementById("response");
-    let isListening = false;
-    let isProcessing = false;
-    
-    // Check if speech recognition is supported
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      responseBox.textContent = "❌ Speech recognition not supported in this browser.";
-      mic.disabled = true;
-    } else {
-      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      recognition.lang = "en-US";
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-      recognition.continuous = false;
-      
-      mic.onclick = () => {
-        if (isListening || isProcessing) return;
-        
-        responseBox.textContent = "🎙️ Listening...";
-        responseBox.classList.add("loading");
-        mic.disabled = true;
-        isListening = true;
-        
-        try {
-          recognition.start();
-        } catch (error) {
-          console.error("Recognition start error:", error);
-          resetUI();
-          responseBox.textContent = "❌ Error starting speech recognition.";
-        }
-      };
-      
-      recognition.onresult = async (event) => {
-        const msg = event.results[0][0].transcript;
-        responseBox.textContent = `🗣️ You: ${msg}`;
-        responseBox.classList.remove("loading");
-        isListening = false;
-        isProcessing = true;
-        
-        try {
-          const res = await fetch("/ask", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: msg })
-          });
-          
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-          }
-          
-          const data = await res.json();
-          responseBox.textContent = `🤖 EHI: ${data.response}`;
-          
-          // Play voice using the Flask backend
-          await playVoice(data.response);
-          
-        } catch (err) {
-          console.error("Fetch failed:", err);
-          responseBox.textContent = "❌ Error getting response. Check connection.";
-        } finally {
-          resetUI();
-        }
-      };
-      
-      recognition.onerror = (event) => {
-        console.error("Recognition error:", event.error);
-        let errorMsg = "❌ ";
-        switch(event.error) {
-          case 'no-speech':
-            errorMsg += "No speech detected. Try again.";
-            break;
-          case 'audio-capture':
-            errorMsg += "Microphone access denied.";
-            break;
-          case 'not-allowed':
-            errorMsg += "Microphone permission denied.";
-            break;
-          case 'network':
-            errorMsg += "Network error. Check connection.";
-            break;
-          default:
-            errorMsg += "Speech recognition error. Try again.";
-        }
-        responseBox.textContent = errorMsg;
-        resetUI();
-      };
-      
-      recognition.onend = () => {
-        if (isListening) {
-          responseBox.textContent = "❌ Didn't catch that. Try again.";
-          resetUI();
-        }
-      };
+
+    const synth = window.speechSynthesis;
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    mic.onclick = () => {
+      responseBox.textContent = "Listening...";
+      recognition.start();
+    };
+
+    recognition.onresult = async (event) => {
+      const msg = event.results[0][0].transcript;
+      responseBox.textContent = `You: ${msg}`;
+      const res = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg })
+      });
+      const data = await res.json();
+      speak(data.response);
+      responseBox.textContent = `EHI: ${data.response}`;
+    };
+
+    recognition.onerror = () => {
+      responseBox.textContent = "Didn't catch that. Try again.";
+    };
+
+    function speak(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "en-US";
+      utterance.rate = 1.0;
+      synth.speak(utterance);
     }
-    
-    async function playVoice(text) {
-      try {
-        console.log("🎵 Requesting voice for:", text);
-        
-        const response = await fetch("/speak", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: text })
-        });
-        
-        console.log("📡 Voice response status:", response.status);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("❌ Voice API error:", errorText);
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-        
-        const audioBlob = await response.blob();
-        console.log("🎵 Audio blob size:", audioBlob.size, "bytes");
-        
-        if (audioBlob.size === 0) {
-          throw new Error("Empty audio response");
-        }
-        
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-        
-        // Set volume to maximum
-        audio.volume = 1.0;
-        
-        audio.onloadeddata = () => {
-          console.log("🎵 Audio loaded, duration:", audio.duration, "seconds");
-        };
-        
-        audio.onplay = () => {
-          console.log("🔊 EHI is speaking...");
-          responseBox.classList.add("loading");
-        };
-        
-        audio.onended = () => {
-          console.log("🔇 EHI finished speaking");
-          responseBox.classList.remove("loading");
-          URL.revokeObjectURL(audioUrl);
-        };
-        
-        audio.onerror = (e) => {
-          console.error("Audio playback failed:", e);
-          console.error("Audio error details:", audio.error);
-          responseBox.classList.remove("loading");
-          responseBox.textContent += " (Audio playback failed)";
-          URL.revokeObjectURL(audioUrl);
-        };
-        
-        // Try to play with user interaction context
-        try {
-          await audio.play();
-          console.log("✅ Audio started playing");
-        } catch (playError) {
-          console.error("Play error:", playError);
-          // Fallback: try to play after user clicks anywhere
-          responseBox.textContent += " (Click anywhere to hear voice)";
-          document.addEventListener('click', async () => {
-            try {
-              await audio.play();
-            } catch (retryError) {
-              console.error("Retry play failed:", retryError);
-            }
-          }, { once: true });
-        }
-        
-      } catch (error) {
-        console.error("Voice synthesis error:", error);
-        responseBox.textContent += ` (Voice error: ${error.message})`;
-      }
-    }
-    
-    function resetUI() {
-      isListening = false;
-      isProcessing = false;
-      mic.disabled = false;
-      responseBox.classList.remove("loading");
-    }
-    
-    // Request microphone permission on page load
-    window.addEventListener('load', async () => {
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log("Microphone permission granted");
-      } catch (error) {
-        console.warn("Microphone permission not granted:", error);
-        responseBox.textContent = "⚠️ Please allow microphone access for voice input.";
-      }
-    });
   </script>
 </body>
 </html>
