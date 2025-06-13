@@ -3,3 +3,4 @@ requests
 wikipedia
 gunicorn
 pyttsx3
+eSpeak
