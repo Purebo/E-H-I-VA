@@ -158,20 +158,38 @@
     
     async function playVoice(text) {
       try {
+        console.log("🎵 Requesting voice for:", text);
+        
         const response = await fetch("/speak", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: text })
         });
         
+        console.log("📡 Voice response status:", response.status);
+        
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `HTTP ${response.status}`);
+          const errorText = await response.text();
+          console.error("❌ Voice API error:", errorText);
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
         
         const audioBlob = await response.blob();
+        console.log("🎵 Audio blob size:", audioBlob.size, "bytes");
+        
+        if (audioBlob.size === 0) {
+          throw new Error("Empty audio response");
+        }
+        
         const audioUrl = URL.createObjectURL(audioBlob);
         const audio = new Audio(audioUrl);
+        
+        // Set volume to maximum
+        audio.volume = 1.0;
+        
+        audio.onloadeddata = () => {
+          console.log("🎵 Audio loaded, duration:", audio.duration, "seconds");
+        };
         
         audio.onplay = () => {
           console.log("🔊 EHI is speaking...");
@@ -181,21 +199,37 @@
         audio.onended = () => {
           console.log("🔇 EHI finished speaking");
           responseBox.classList.remove("loading");
-          URL.revokeObjectURL(audioUrl); // Clean up memory
+          URL.revokeObjectURL(audioUrl);
         };
         
         audio.onerror = (e) => {
           console.error("Audio playback failed:", e);
+          console.error("Audio error details:", audio.error);
           responseBox.classList.remove("loading");
-          responseBox.textContent += " (Voice playback failed)";
+          responseBox.textContent += " (Audio playback failed)";
           URL.revokeObjectURL(audioUrl);
         };
         
-        await audio.play();
+        // Try to play with user interaction context
+        try {
+          await audio.play();
+          console.log("✅ Audio started playing");
+        } catch (playError) {
+          console.error("Play error:", playError);
+          // Fallback: try to play after user clicks anywhere
+          responseBox.textContent += " (Click anywhere to hear voice)";
+          document.addEventListener('click', async () => {
+            try {
+              await audio.play();
+            } catch (retryError) {
+              console.error("Retry play failed:", retryError);
+            }
+          }, { once: true });
+        }
         
       } catch (error) {
         console.error("Voice synthesis error:", error);
-        responseBox.textContent += " (Voice synthesis failed)";
+        responseBox.textContent += ` (Voice error: ${error.message})`;
       }
     }
     
