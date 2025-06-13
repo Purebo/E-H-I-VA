@@ -1,88 +1,92 @@
-from flask import Flask, request, jsonify, render_template, send_file
+from flask import Flask, request, jsonify, render_template
 import datetime
+import random
+import os
 import requests
 import wikipedia
-import pyttsx3
-import tempfile
-import os
 
 app = Flask(__name__)
 
-# Initialize pyttsx3 for text-to-speech
-engine = pyttsx3.init()
-engine.setProperty('voice', 'female')  # Set default voice to female (depends on system voices)
-engine.setProperty('rate', 160)  # Adjust speed
-engine.setProperty('volume', 1.0)  # Max volume
+# Together AI settings
+together_api_key = "tgp_v1_Pctw4hBJp8GJ-O1iX_yeLiSMBZCkBkYckXaMiCJVYZs"
+together_model = "meta-llama/Llama-2-13b-chat-hf"
+together_api_url = "https://api.together.xyz/v1/chat/completions"
 
-def ask_together_ai(q):
+def ask_together_ai(user_question):
     headers = {
-        "Authorization": f"Bearer your_together_api_key",
+        "Authorization": f"Bearer {together_api_key}",
         "Content-Type": "application/json"
     }
-    sys = "You are EHI, a voice-only AI assistant. Spicy created you to have a conscience and evolve with time. Answer short, smart, and friendly."
+
+    system_prompt = """You are EHI (Enhanced Human Intelligence), an autonomous voice assistant created by SpicyWasTaken.
+    You are proactive, intelligent, and can:
+    Keep responses conversational and concise for voice interaction (under 60 words).
+    Be helpful, proactive, and remember you're speaking to your master Spicy.
+    If relevant, suggest actions."""
+
     data = {
-        "model": "meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo",
-        "messages": [{"role": "system", "content": sys}, {"role": "user", "content": q}],
-        "max_tokens": 200, 
-        "temperature": 0.7
+        "model": together_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_question}
+        ],
+        "max_tokens": 250,
+        "temperature": 0.8
     }
+
     try:
-        res = requests.post("https://api.together.xyz/v1/chat/completions", headers=headers, json=data, timeout=15)
-        if res.ok:
-            return res.json()["choices"][0]["message"]["content"].strip()
+        response = requests.post(together_api_url, headers=headers, json=data, timeout=15)
+        if response.status_code == 200:
+            answer = response.json()['choices'][0]['message']['content']
+            return answer.strip()
         else:
-            return "AI couldn't reply."
+            return "Sorry, I couldn't process that request right now."
     except Exception as e:
-        print(f"Error in ask_together_ai: {e}")
-        return "EHI encountered an error."
+        return f"Error: {e}"
 
 @app.route("/")
-def home():
+def index():
     return render_template("index.html")
 
 @app.route("/ask", methods=["POST"])
 def ask():
-    try:
-        msg = request.json.get("message", "").lower()
-        
-        if "what is the time" in msg:
-            return jsonify({"response": datetime.datetime.now().strftime("%I:%M %p")})
-        
-        if "wikipedia" in msg:
-            q = msg.replace("wikipedia", "").strip()
-            try:
-                summary = wikipedia.summary(q, sentences=2)
-                return jsonify({"response": "According to Wikipedia: " + summary})
-            except wikipedia.exceptions.PageError:
-                return jsonify({"response": "Topic not found on Wikipedia."})
-            except Exception as e:
-                print(f"Wikipedia error: {e}")
-                return jsonify({"response": "Error accessing Wikipedia."})
-        
-        response = ask_together_ai(msg)
+    data = request.get_json()
+    user_input = data.get("message", "")
+    user_input = user_input.lower()
+
+    if 'what is the time' in user_input:
+        current_time = datetime.datetime.now().strftime("%I:%M %p")
+        return jsonify({"response": f"The time is {current_time}"})
+
+    elif 'who are you' in user_input:
+        return jsonify({"response": "I am EHI, created by Spicy Was Taken to assist you like Jarvis."})
+
+    elif 'who created you' in user_input:
+        return jsonify({"response": "Spicy, my master, created me."})
+
+    elif 'who is spicy' in user_input:
+        return jsonify({"response": "Spicy is my creator and a brilliant hacker and developer."})
+
+    elif 'why were you created' in user_input:
+        return jsonify({"response": "Spicy created me to be have a consciousness just like Jarvis in Iron Man."})
+
+    elif 'what is your name' in user_input:
+        return jsonify({"response": "My name is EHI, short for Enhanced Human Intelligence."})
+
+    elif 'what can you do' in user_input:
+        return jsonify({"response": "I can open sites, answer questions, and help with tasks. Just ask!"})
+
+    elif 'wikipedia' in user_input:
+        query = user_input.replace("wikipedia", "").strip()
+        try:
+            summary = wikipedia.summary(query, sentences=2)
+            return jsonify({"response": f"According to Wikipedia: {summary}"})
+        except:
+            return jsonify({"response": "Sorry, I couldn't find information on that topic."})
+
+    else:
+        response = ask_together_ai(user_input)
         return jsonify({"response": response})
-    
-    except Exception as e:
-        print(f"Error in ask route: {e}")
-        return jsonify({"response": "Sorry, I encountered an error processing your request."})
-
-@app.route("/speak", methods=["POST"])
-def speak():
-    try:
-        text = request.json.get("text", "")
-        if not text:
-            return jsonify({"error": "No text provided"}), 400
-
-        # Convert text to speech and save as temporary file
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-        engine.save_to_file(text, temp_file.name)
-        engine.runAndWait()
-
-        return send_file(temp_file.name, mimetype="audio/mpeg", as_attachment=False, download_name="speech.mp3")
-    
-    except Exception as e:
-        print(f"Error in speak route: {e}")
-        return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True)
